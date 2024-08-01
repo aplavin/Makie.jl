@@ -56,7 +56,6 @@ import KernelDensity
 import Isoband
 import PolygonOps
 import GridLayoutBase
-import ImageIO
 import FileIO
 import SparseArrays
 import TriplotBase
