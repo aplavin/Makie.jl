@@ -301,6 +301,7 @@ function distance_score(a::T, b::T, scores_dict; maxscore=Inf) where {T<:Union{T
     isempty(a) && isempty(b) && return 0.0
     common_keys = max(firstindex(a), firstindex(b)):min(lastindex(a), lastindex(b))
     n_different_keys = abs(firstindex(a) - firstindex(b)) + abs(lastindex(a) - lastindex(b))
+    iszero(n_different_keys) || return 100.0
     score = √n_different_keys
     for key in common_keys
         score > maxscore && break
