@@ -46,6 +46,7 @@ uniform float pattern_length;
 uniform vec2 resolution;
 uniform vec2 scene_origin;
 uniform float px_per_unit;
+uniform float line_halo_px;
 
 uniform int linecap;
 uniform int joinstyle;
@@ -338,6 +339,7 @@ void main(void)
     // outside). To avoid these issues we reduce alpha directly rather than
     // shrinking the linewidth further at some point.
     float halfwidth = 0.5 * max(AA_RADIUS, g_thickness[1]);
+    float edge_padding = AA_THICKNESS + max(0.0, line_halo_px);
 
     // determine the direction of each of the 3 segments (previous, current, next)
     vec3 v1 = (p2 - p1);
@@ -423,8 +425,8 @@ void main(void)
     // TODO: skipping this for linestart/end avoid round and square being cut off
     //       but causes overlap...
     vec2 shape_factor = (isvalid[0] && isvalid[3]) || (linecap == BUTT) ? vec2(
-        max(0.0, segment_length / max(segment_length, (halfwidth + AA_THICKNESS) * (extrusion[0][0] - extrusion[1][0]))), // -n
-        max(0.0, segment_length / max(segment_length, (halfwidth + AA_THICKNESS) * (extrusion[0][1] - extrusion[1][1])))  // +n
+        max(0.0, segment_length / max(segment_length, (halfwidth + edge_padding) * (extrusion[0][0] - extrusion[1][0]))), // -n
+        max(0.0, segment_length / max(segment_length, (halfwidth + edge_padding) * (extrusion[0][1] - extrusion[1][1])))  // +n
     ) : vec2(1.0);
 
     // Generate static/flat outputs
@@ -513,22 +515,22 @@ void main(void)
                 if (is_truncated[x] || !isvalid[3*x]) {
                     // handle overlap in fragment shader via SDF comparison
                     offset = shape_factor[y] * (
-                        (halfwidth * max(1.0, abs(extrusion[x][y])) + AA_THICKNESS) * (2 * x - 1) * v1 +
-                        vec3((2 * y - 1) * (halfwidth + AA_THICKNESS) * n1, 0)
+                        (halfwidth * max(1.0, abs(extrusion[x][y])) + edge_padding) * (2 * x - 1) * v1 +
+                        vec3((2 * y - 1) * (halfwidth + edge_padding) * n1, 0)
                     );
                 } else {
                     // handle overlap by adjusting geometry
                     // TODO: should this include z in miter_n?
                     offset = (2 * y - 1) * shape_factor[y] *
-                        (halfwidth + AA_THICKNESS) /
+                        (halfwidth + edge_padding) /
                         float[2](miter_offset1, miter_offset2)[x] *
                         vec3(vec2[2](miter_n1, miter_n2)[x], 0);
                 }
             } else {
                 // discard joint for cleaner pattern handling
                 offset =
-                    adjustment[x] * (halfwidth * abs(extrusion[x][1]) + AA_THICKNESS) * v1 +
-                    vec3((2 * y - 1) * (halfwidth + AA_THICKNESS) * n1, 0);
+                    adjustment[x] * (halfwidth * abs(extrusion[x][1]) + edge_padding) * v1 +
+                    vec3((2 * y - 1) * (halfwidth + edge_padding) * n1, 0);
             }
 
             vertex.position = vec3[2](p1, p2)[x] + offset;

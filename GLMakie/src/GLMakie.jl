@@ -15,6 +15,8 @@ Base.@kwdef mutable struct LineWobbleConfig
     freq_2::Float32 = 0.16f0
     length_px::Float32 = 100.0f0
     randomness::Float32 = 2.0f0
+    halo_px::Float32 = 0.0f0
+    halo_alpha::Float32 = 0.0f0
 end
 
 const GLOBAL_LINE_WOBBLE = LineWobbleConfig()

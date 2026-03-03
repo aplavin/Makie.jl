@@ -39,6 +39,8 @@ uniform float line_wobble_freq_1;
 uniform float line_wobble_freq_2;
 uniform float line_wobble_length_px;
 uniform float line_wobble_randomness;
+uniform float line_halo_px;
+uniform float line_halo_alpha;
 
 {{color_map_type}} color_map;
 {{color_norm_type}} color_norm;
@@ -285,13 +287,20 @@ if (!debug) {
     // so this is 0 at the left edge and 1 at the right edge (with extrusion considered)
     float factor = (-f_quad_sdf.x - f_linestart) / f_linelength;
     color = get_color(f_color1 + factor * (f_color2 - f_color1), color_map, color_norm);
-    color.a *= f_alpha_weight;
+    float line_cov = !fxaa ? aastep(0.0, -sdf) : step(0.0, -sdf);
+    float line_alpha = color.a * f_alpha_weight * line_cov;
 
-    if (!fxaa) {
-        color.a *= aastep(0.0, -sdf);
-    } else {
-        color.a *= step(0.0, -sdf);
-    }
+    float halo_width = max(0.0, line_halo_px);
+    float halo_cov = !fxaa ? aastep(0.0, -(sdf - halo_width)) : step(0.0, -(sdf - halo_width));
+    float halo_outer_cov = max(0.0, halo_cov - line_cov);
+    float halo_outer_alpha = line_halo_alpha * f_alpha_weight * halo_outer_cov;
+
+    float out_alpha = line_alpha + halo_outer_alpha;
+    vec3 halo_rgb = vec3(1.0);
+    vec3 out_rgb = out_alpha > 1.0e-6 ?
+        (color.rgb * line_alpha + halo_rgb * halo_outer_alpha) / out_alpha :
+        vec3(0.0);
+    color = vec4(out_rgb, out_alpha);
 // #endif
 
 } else {

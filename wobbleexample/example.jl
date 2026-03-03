@@ -120,6 +120,8 @@ GLMakie.GLOBAL_LINE_WOBBLE.freq_1 = 0.07f0
 GLMakie.GLOBAL_LINE_WOBBLE.freq_2 = 0.16f0
 GLMakie.GLOBAL_LINE_WOBBLE.length_px = 100.0f0
 GLMakie.GLOBAL_LINE_WOBBLE.randomness = 2.0f0
+GLMakie.GLOBAL_LINE_WOBBLE.halo_px = 3.0f0
+GLMakie.GLOBAL_LINE_WOBBLE.halo_alpha = 0.98f0
 
 font_path = set_xkcd_text_theme!()
 fig = make_figure()

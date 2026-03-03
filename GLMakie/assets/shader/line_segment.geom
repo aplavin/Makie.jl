@@ -11,6 +11,7 @@ layout(triangle_strip, max_vertices = 4) out;
 uniform vec2 resolution;
 uniform float px_per_unit;
 uniform float pattern_length;
+uniform float line_halo_px;
 {{pattern_type}} pattern;
 uniform int linecap;
 
@@ -174,15 +175,16 @@ void main(void)
     for (int x = 0; x < 2; x++) {
         // pass on linewidth and id (picking) for the current line vertex
         float halfwidth = 0.5 * max(AA_RADIUS, g_thickness[x]);
+        float edge_padding = AA_THICKNESS + max(0.0, line_halo_px);
         // Get offset in line direction
-        float v_offset = (2 * x - 1) * (halfwidth + AA_THICKNESS);
+        float v_offset = (2 * x - 1) * (halfwidth + edge_padding);
         // TODO: if we just make this a varying output we probably get var linewidths here
         f_linewidth = halfwidth;
         f_id = g_id[x];
 
         for (int y = 0; y < 2; y++) {
             // Get offset in y direction & compute vertex position
-            float n_offset = (2 * y - 1) * (halfwidth + AA_THICKNESS);
+            float n_offset = (2 * y - 1) * (halfwidth + edge_padding);
             vec3 position = vec3[2](p1, p2)[x] + v_offset * v1 + n_offset * vec3(n1, 0);
             gl_Position = vec4(2.0 * position.xy / (px_per_unit * resolution) - 1.0, position.z, 1.0);
 
