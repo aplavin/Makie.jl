@@ -36,9 +36,12 @@ flat out float f_cumulative_length;
 flat out ivec2 f_capmode;
 flat out vec4 f_linepoints;
 flat out vec4 f_miter_vecs;
+flat out float f_wobble_phase;
+flat out float f_wobble_shift;
 
 const float AA_RADIUS = 0.8;
 const float AA_THICKNESS = 2.0 * AA_RADIUS;
+const float TAU = 6.28318530718;
 
 uniform mat4 projectionview;
 uniform float depth_shift;
@@ -83,6 +86,13 @@ vec3 screen_space(vec4 vertex) {
 
 vec2 normal_vector(in vec2 v) { return vec2(-v.y, v.x); }
 vec2 normal_vector(in vec3 v) { return vec2(-v.y, v.x); }
+
+float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
 
 void main(void)
 {
@@ -135,6 +145,8 @@ void main(void)
     // get vector in line direction and vector in linewidth direction
     vec3 v1 = (p2 - p1);
     float segment_length = length(p2.xy - p1.xy);
+    if (segment_length <= 1.0e-6)
+        return;
     v1 /= segment_length;
     vec2 n1 = normal_vector(v1);
 
@@ -150,6 +162,9 @@ void main(void)
     f_linestart = 0;                // no corners so no joint extrusion to consider
     f_linelength = segment_length;  // and also no changes in line length
     f_cumulative_length = 0.0;      // resets for each new segment
+    float wobble_seed = float(g_id[0].x) + 0.75487767 * float(min(g_id[0].y, g_id[1].y));
+    f_wobble_phase = TAU * hash11(0.00017 * wobble_seed + 0.37);
+    f_wobble_shift = 200.0 * hash11(0.00029 * wobble_seed + 0.11);
 
     // linecaps
     f_capmode = ivec2(linecap);

@@ -1282,6 +1282,12 @@ function convert_gaps(gaps::GapType)
     return (dot_gap = dot_gap, dash_gap = dash_gap)
 end
 
+convert_attribute(value::Bool, ::key"wobble") = value ? 1.0f0 : 0.0f0
+convert_attribute(value::Real, ::key"wobble") = Float32(value)
+function convert_attribute(value, ::key"wobble")
+    throw(ArgumentError("`wobble` must be `Bool` or `Real`, got $(typeof(value))."))
+end
+
 function convert_attribute(value::Symbol, ::key"linecap")
     # TODO: make this an enum?
     vals = Dict(:butt => Int32(0), :square => Int32(1), :round => Int32(2))

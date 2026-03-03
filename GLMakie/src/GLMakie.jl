@@ -8,6 +8,15 @@ end
 
 const DEBUG = Ref(false)
 
+Base.@kwdef mutable struct LineWobbleConfig
+    strength::Float32 = 1.0f0
+    amplitude_px::Float32 = 1.6f0
+    freq_1::Float32 = 0.13f0
+    freq_2::Float32 = 0.31f0
+end
+
+const GLOBAL_LINE_WOBBLE = LineWobbleConfig()
+
 using ModernGL, FixedPointNumbers, Colors, GeometryBasics
 using Makie, FileIO
 
@@ -43,6 +52,7 @@ end
 
 import ShaderAbstractions: Sampler, Buffer
 export Sampler, Buffer
+export LineWobbleConfig, GLOBAL_LINE_WOBBLE
 
 struct ShaderSource
     typ::GLenum

@@ -54,6 +54,7 @@ const MAKIE_DEFAULT_THEME = Attributes(
     linecolor = :black,
     linewidth = 1.5,
     linestyle = nothing,
+    linewobble = 0.0,
     linecap = :butt,
     joinstyle = :miter,
     miter_limit = pi / 3,

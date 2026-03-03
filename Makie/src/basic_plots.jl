@@ -410,6 +410,11 @@ Creates a connected line plot for each element in `(x, y, z)`, `(x, y)` or `posi
     """
     linestyle = nothing
     """
+    `[GLMakie only]` Sets xkcd-style line wobble strength.
+    Use `false`/`0` to disable, `true` for a default effect, or a positive number to control the strength.
+    """
+    wobble = @inherit linewobble 0.0
+    """
     Sets the type of line cap used. Options are `:butt` (flat without extrusion),
     `:square` (flat with half a linewidth extrusion) or `:round`.
     """
@@ -457,6 +462,11 @@ Plots a line for each pair of points in `(x, y, z)`, `(x, y)`, or `positions`.
     For custom patterns have a look at [`Makie.Linestyle`](@ref).
     """
     linestyle = nothing
+    """
+    `[GLMakie only]` Sets xkcd-style line wobble strength.
+    Use `false`/`0` to disable, `true` for a default effect, or a positive number to control the strength.
+    """
+    wobble = @inherit linewobble 0.0
     "Sets the type of linecap used, i.e. :butt (flat with no extrusion), :square (flat with 1 linewidth extrusion) or :round."
     linecap = @inherit linecap
     """

@@ -34,6 +34,8 @@ flat out float f_cumulative_length;
 flat out ivec2 f_capmode;
 flat out vec4 f_linepoints;
 flat out vec4 f_miter_vecs;
+flat out float f_wobble_phase;
+flat out float f_wobble_shift;
 out float gl_ClipDistance[8];
 
 out vec3 o_view_pos;
@@ -62,6 +64,7 @@ const int SQUARE = 1;
 const int ROUND  = 2;
 const int MITER  = 0;
 const int BEVEL  = 3;
+const float TAU = 6.28318530718;
 
 vec3 screen_space(vec4 vertex) {
     return vec3((0.5 * vertex.xy / vertex.w + 0.5) * px_per_unit * resolution, vertex.z / vertex.w);
@@ -91,6 +94,13 @@ void emit_vertex(LineVertex vertex) {
 vec2 normal_vector(in vec2 v) { return vec2(-v.y, v.x); }
 vec2 normal_vector(in vec3 v) { return vec2(-v.y, v.x); }
 float sign_no_zero(float value) { return value >= 0.0 ? 1.0 : -1.0; }
+
+float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
 
 bool process_clip_planes(inout vec4 p1, inout vec4 p2, inout bool[4] isvalid)
 {
@@ -332,6 +342,8 @@ void main(void)
     // determine the direction of each of the 3 segments (previous, current, next)
     vec3 v1 = (p2 - p1);
     float segment_length = length(v1.xy);
+    if (segment_length <= 1.0e-6)
+        return;
     v1 /= segment_length;
 
     // depth is irrelevant for these
@@ -477,6 +489,9 @@ void main(void)
 
     // for uv's
     f_cumulative_length = g_lastlen[1];
+    float wobble_seed = float(g_id[1].x);
+    f_wobble_phase = TAU * hash11(0.00017 * wobble_seed + 0.37);
+    f_wobble_shift = 0.0;
 
     // 0 :butt/normal cap or joint | 1 :square cap | 2 rounded cap/joint
     f_capmode = ivec2(

@@ -570,11 +570,25 @@ end
 ### Lines
 ################################################################################
 
+@inline global_line_wobble_strength() = max(0.0f0, Float32(GLOBAL_LINE_WOBBLE.strength))
+@inline global_line_wobble_amplitude_px() = max(0.0f0, Float32(GLOBAL_LINE_WOBBLE.amplitude_px))
+@inline global_line_wobble_freq_1() = Float32(GLOBAL_LINE_WOBBLE.freq_1)
+@inline global_line_wobble_freq_2() = Float32(GLOBAL_LINE_WOBBLE.freq_2)
+
+function apply_global_line_wobble_uniforms!(data::Dict{Symbol, Any})
+    data[:line_wobble] = global_line_wobble_strength()
+    data[:line_wobble_amplitude_px] = global_line_wobble_amplitude_px()
+    data[:line_wobble_freq_1] = global_line_wobble_freq_1()
+    data[:line_wobble_freq_2] = global_line_wobble_freq_2()
+    return data
+end
+
 function assemble_lines_robj!(data, screen::Screen, attr, args, input2glname)
     positions = args[1] # changes name, so we use positional
     linestyle = attr[:linestyle][]
+    wobble = global_line_wobble_strength()
 
-    data[:fast] = isnothing(linestyle)
+    data[:fast] = isnothing(linestyle) && (wobble <= 0.0)
     # :fast == true removes pattern from the shader so we don't need
     #               to worry about this
     data[:vertex] = positions # Needs to be set before draw_lines()
@@ -586,6 +600,7 @@ function assemble_lines_robj!(data, screen::Screen, attr, args, input2glname)
         input2glname[:scaled_color] = :intensity
     end
 
+    apply_global_line_wobble_uniforms!(data)
     return draw_lines(screen, positions, data)
 end
 
@@ -684,6 +699,8 @@ end
 
 function draw_atomic(screen::Screen, scene::Scene, plot::Lines)
     attr = generic_robj_setup(screen, scene, plot)
+    wobble = global_line_wobble_strength()
+    haskey(attr, :wobble) || add_constant!(attr, :wobble, 0.0f0)
 
     Makie.add_computation!(attr, :gl_miter_limit)
     Makie.add_computation!(attr, :uniform_pattern, :uniform_pattern_length)
@@ -708,7 +725,7 @@ function draw_atomic(screen::Screen, scene::Scene, plot::Lines)
 
     Makie.add_computation!(attr, Val(:uniform_clip_planes), :clip)
 
-    if isnothing(plot.linestyle[])
+    if isnothing(plot.linestyle[]) && (wobble <= 0.0)
         positions = :positions_transformed_f32c
         # unused dummy data
         map!(pos -> collect(Float32.(eachindex(pos))), attr, positions, :gl_last_length)
@@ -775,11 +792,13 @@ function assemble_linesegments_robj!(data, screen::Screen, attr, args, input2gln
     if isnothing(attr[:linestyle][])
         data[:pattern] = nothing
     end
+    apply_global_line_wobble_uniforms!(data)
     return draw_linesegments(screen, data[:vertex], data)
 end
 
 function draw_atomic(screen::Screen, scene::Scene, plot::LineSegments)
     attr = generic_robj_setup(screen, scene, plot)
+    haskey(attr, :wobble) || add_constant!(attr, :wobble, 0.0f0)
 
     # linestyle/pattern handling
     Makie.add_computation!(attr, :uniform_pattern, :uniform_pattern_length)

@@ -98,7 +98,7 @@ function convert_arguments(::Type{<:Series}, arg::AbstractVector{<:AbstractVecto
 end
 
 function plot!(plot::Series)
-    @extract plot (curves, labels, linewidth, linecap, joinstyle, miter_limit, color, solid_color, space, linestyle)
+    @extract plot (curves, labels, linewidth, linecap, joinstyle, miter_limit, color, solid_color, space, linestyle, wobble)
     sargs = [:marker, :markersize, :strokecolor, :strokewidth]
     scatter = Dict((f => plot[f] for f in sargs if !isnothing(plot[f][])))
     nseries = length(curves[])
@@ -123,13 +123,13 @@ function plot!(plot::Series)
                 plot, positions;
                 linewidth = linewidth, linecap = plot.linecap, joinstyle = joinstyle,
                 miter_limit = miter_limit, color = series_color, markercolor = markercolor,
-                label = label[], scatter..., space = space, linestyle = series_linestyle
+                label = label[], scatter..., space = space, linestyle = series_linestyle, wobble = wobble
             )
         else
             lines!(
                 plot, positions; linewidth = linewidth, linecap = plot.linecap,
                 joinstyle = joinstyle, miter_limit = miter_limit, color = series_color,
-                label = label, space = space, linestyle = series_linestyle
+                label = label, space = space, linestyle = series_linestyle, wobble = wobble
             )
         end
     end

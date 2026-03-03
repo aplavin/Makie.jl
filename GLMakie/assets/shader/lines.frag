@@ -27,10 +27,16 @@ flat in float f_cumulative_length;
 flat in ivec2 f_capmode;
 flat in vec4 f_linepoints;
 flat in vec4 f_miter_vecs;
+flat in float f_wobble_phase;
+flat in float f_wobble_shift;
 
 {{pattern_type}} pattern;
 uniform float pattern_length;
 uniform bool fxaa;
+uniform float line_wobble;
+uniform float line_wobble_amplitude_px;
+uniform float line_wobble_freq_1;
+uniform float line_wobble_freq_2;
 
 {{color_map_type}} color_map;
 {{color_norm_type}} color_norm;
@@ -48,6 +54,12 @@ const int BEVEL  = 3;
 
 float aastep(float threshold1, float dist) {
     return smoothstep(threshold1-AA_RADIUS, threshold1+AA_RADIUS, dist);
+}
+
+float wobble_profile(float s, float phase) {
+    float a = sin(line_wobble_freq_1 * s + phase);
+    float b = sin(line_wobble_freq_2 * s + 1.73 * phase + 0.4);
+    return (a + 0.45 * b) / 1.45;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -140,12 +152,15 @@ void write2framebuffer(vec4 color, uvec2 id);
 
 void main(){
     vec4 color;
+    float line_s = f_cumulative_length - f_quad_sdf.x + f_wobble_shift;
+    float wobble_offset = line_wobble * line_wobble_amplitude_px * wobble_profile(line_s, f_wobble_phase);
+    float wobble_sdf_z = f_quad_sdf.z - wobble_offset;
 
     // f_quad_sdf.x is the negative distance from p1 in v1 direction
     // (where f_cumulative_length applies) so we need to subtract here
     vec2 uv = vec2(
         (f_cumulative_length - f_quad_sdf.x + 0.5) / (2.0 * f_linewidth * pattern_length),
-        0.5 + 0.5 * f_quad_sdf.z / f_linewidth
+        0.5 + 0.5 * wobble_sdf_z / f_linewidth
     );
 
 // #ifndef DEBUG
@@ -166,7 +181,7 @@ if (!debug) {
     // <   < | >    < >    < | >   >
     if (f_capmode.x == ROUND) {
         // in circle(p1, halfwidth) || is beyond p1 in p2-p1 direction
-        sdf = min(sqrt(f_quad_sdf.x * f_quad_sdf.x + f_quad_sdf.z * f_quad_sdf.z) - f_linewidth, f_quad_sdf.x);
+        sdf = min(sqrt(f_quad_sdf.x * f_quad_sdf.x + wobble_sdf_z * wobble_sdf_z) - f_linewidth, f_quad_sdf.x);
     } else if (f_capmode.x == SQUARE) {
         // everything in p2-p1 direction shifted by halfwidth in p1-p2 direction (i.e. include more)
         sdf = f_quad_sdf.x - f_linewidth;
@@ -180,7 +195,7 @@ if (!debug) {
     // Same as above but for p2
     if (f_capmode.y == ROUND) { // rounded joint or cap
         sdf = max(sdf,
-            min(sqrt(f_quad_sdf.y * f_quad_sdf.y + f_quad_sdf.z * f_quad_sdf.z) - f_linewidth, f_quad_sdf.y)
+            min(sqrt(f_quad_sdf.y * f_quad_sdf.y + wobble_sdf_z * wobble_sdf_z) - f_linewidth, f_quad_sdf.y)
         );
     } else if (f_capmode.y == SQUARE) { // :square cap
         sdf = max(sdf, f_quad_sdf.y - f_linewidth);
@@ -194,7 +209,7 @@ if (!debug) {
     //  ^  |  ^      ^  | ^
     //     1------------2
     //  ^  |  ^      ^  | ^
-    sdf = max(sdf, abs(f_quad_sdf.z) - f_linewidth);
+    sdf = max(sdf, abs(wobble_sdf_z) - f_linewidth);
 
     // inner truncation (AA for overlapping parts)
     // min(a, b) keeps what is inside a and b
@@ -239,7 +254,7 @@ if (!debug) {
 
     // mark "outside" define by quad_sdf in black
     float sdf = max(f_quad_sdf.x - f_extrusion.x, f_quad_sdf.y - f_extrusion.y);
-    sdf = max(sdf, abs(f_quad_sdf.z) - f_linewidth);
+    sdf = max(sdf, abs(wobble_sdf_z) - f_linewidth);
     color.rgb -= vec3(0.4) * step(0.0, sdf);
 
     // Mark discarded space in red/blue
