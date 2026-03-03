@@ -1,5 +1,35 @@
 using GLMakie
 
+function set_xkcd_text_theme!()
+    font_path = joinpath(@__DIR__, "fonts", "xkcd-script.ttf")
+    isfile(font_path) || error("Missing xkcd font at: $font_path")
+
+    set_theme!(
+        font = font_path,
+        fontsize = 18,
+        Figure = (
+            fontsize = 18,
+        ),
+        Axis = (
+            titlefont = font_path,
+            xlabelfont = font_path,
+            ylabelfont = font_path,
+            xticklabelfont = font_path,
+            yticklabelfont = font_path,
+            titlesize = 26,
+            xlabelsize = 22,
+            ylabelsize = 22,
+            xticklabelsize = 18,
+            yticklabelsize = 18,
+        ),
+        Legend = (
+            labelfont = font_path,
+            labelsize = 18,
+        ),
+    )
+    return font_path
+end
+
 function densify_polyline(points::AbstractVector{Point2f}, samples_per_segment::Integer)
     length(points) >= 2 || return Point2f[]
     segments = map(zip(points[1:end-1], points[2:end])) do (p1, p2)
@@ -75,7 +105,9 @@ GLMakie.GLOBAL_LINE_WOBBLE.freq_2 = 0.16f0
 GLMakie.GLOBAL_LINE_WOBBLE.length_px = 100.0f0
 GLMakie.GLOBAL_LINE_WOBBLE.randomness = 2.0f0
 
+font_path = set_xkcd_text_theme!()
 fig = make_figure()
 output_path = joinpath(@__DIR__, "wobble_lines_demo.png")
 save(output_path, fig)
+println("Font: ", font_path)
 println("Saved: ", output_path)
