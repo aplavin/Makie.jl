@@ -916,7 +916,16 @@ function resolve_wobble_scale(wobble_scale, span, amplitude)
 end
 
 wobble_step(wavelength) = max(wavelength / 6.0, 1.0e-6)
-wobble_phase(seed, idx) = 2.0 * pi * wobble_rand(seed, idx)
+
+function wobble_walk_params(wavelength, randomness)
+    randomness = max(Float64(randomness), 1.0)
+    phase_scale = 2.0 * pi / max(wavelength * randomness, 1.0e-6)
+    log_randomness = 2.0 * log(randomness)
+    return phase_scale, log_randomness
+end
+
+@inline wobble_walk_step(randu, log_randomness) = exp(randu * log_randomness)
+@inline wobble_walk_offset(cursor, phase_scale, amplitude) = 0.35 * amplitude * sin(cursor * phase_scale)
 
 function point_normal(points, i)
     N = length(points)
@@ -931,19 +940,11 @@ function point_normal(points, i)
     return -dy / n, dx / n
 end
 
-function wobble_offset(s, total, amplitude, wavelength, phase1, phase2)
-    u = clamp(s / total, 0.0, 1.0)
-    envelope = 4.0 * u * (1.0 - u)
-    w = 2.0 * pi / wavelength
-    bend = sin(w * s + phase1) + 0.5 * sin(2.0 * w * s + phase2)
-    return 0.35 * amplitude * envelope * bend
-end
-
 function resample_polyline_run(points::AbstractVector{P}, global_idx::AbstractVector{Int}, ds::Float64) where {P <: Point}
     N = length(points)
-    N == 0 && return P[], Int[], Int[], Float64[], Float64[], 0.0
+    N == 0 && return P[], Int[], Int[], Float64[], 0.0
     if N == 1
-        return copy(points), [global_idx[1]], [global_idx[1]], [0.0], [0.0], 0.0
+        return copy(points), [global_idx[1]], [global_idx[1]], [0.0], 0.0
     end
 
     lengths = zeros(Float64, N)
@@ -955,7 +956,7 @@ function resample_polyline_run(points::AbstractVector{P}, global_idx::AbstractVe
     end
     total = lengths[end]
     if !isfinite(total) || total <= 0.0
-        return copy(points), collect(global_idx), collect(global_idx), zeros(Float64, N), zeros(Float64, N), 0.0
+        return copy(points), collect(global_idx), collect(global_idx), zeros(Float64, N), 0.0
     end
 
     nsamples = max(2, Int(ceil(total / ds)) + 1)
@@ -964,7 +965,6 @@ function resample_polyline_run(points::AbstractVector{P}, global_idx::AbstractVe
     left_idx = Vector{Int}(undef, nsamples)
     right_idx = Vector{Int}(undef, nsamples)
     ts = Vector{Float64}(undef, nsamples)
-    svals = Vector{Float64}(undef, nsamples)
 
     seg = 1
     for (k, s) in enumerate(sgrid)
@@ -986,10 +986,9 @@ function resample_polyline_run(points::AbstractVector{P}, global_idx::AbstractVe
         left_idx[k] = global_idx[seg]
         right_idx[k] = global_idx[seg + 1]
         ts[k] = t
-        svals[k] = s
     end
 
-    return sampled, left_idx, right_idx, ts, svals, total
+    return sampled, left_idx, right_idx, ts, total
 end
 
 function maybe_lerp(a, b, t)
@@ -1020,7 +1019,9 @@ function wobble_polyline_points(points::AbstractVector{P}, amplitude, wavelength
     left_idx = Int[]
     right_idx = Int[]
     ts = Float64[]
-    run_idx = UInt32(0)
+    rand_idx = UInt32(0)
+    randomness = 2.0
+    phase_scale, log_randomness = wobble_walk_params(wavelength, randomness)
     ds = wobble_step(wavelength)
     i = 1
     N = length(points)
@@ -1043,16 +1044,18 @@ function wobble_polyline_points(points::AbstractVector{P}, amplitude, wavelength
 
         run_points = @view points[run_start:run_end]
         global_idx = run_start:run_end
-        sampled, run_left, run_right, run_ts, svals, total = resample_polyline_run(run_points, global_idx, ds)
-        run_idx += UInt32(1)
-        phase1 = wobble_phase(seed, UInt32(2) * run_idx)
-        phase2 = wobble_phase(seed, UInt32(2) * run_idx + UInt32(1))
+        sampled, run_left, run_right, run_ts, total = resample_polyline_run(run_points, global_idx, ds)
         amp = min(amplitude, 0.45 * wavelength, 0.45 * total)
 
         if amp > 0.0 && total > 0.0
+            cursor = 0.0
             for k in eachindex(sampled)
                 nx, ny = point_normal(sampled, k)
-                offset = wobble_offset(svals[k], total, amp, wavelength, phase1, phase2)
+                if k > 1
+                    rand_idx += UInt32(1)
+                    cursor += wobble_walk_step(wobble_rand(seed, rand_idx), log_randomness)
+                end
+                offset = wobble_walk_offset(cursor, phase_scale, amp)
                 p = sampled[k]
                 sampled[k] = P(p[1] + offset * nx, p[2] + offset * ny)
             end
@@ -1072,7 +1075,9 @@ function wobble_linesegment_points(points::AbstractVector{P}, amplitude, wavelen
     left_idx = Int[]
     right_idx = Int[]
     ts = Float64[]
-    segment_idx = UInt32(0)
+    rand_idx = UInt32(0)
+    randomness = 2.0
+    phase_scale, log_randomness = wobble_walk_params(wavelength, randomness)
     ds = wobble_step(wavelength)
     N = length(points)
     i = 1
@@ -1102,20 +1107,20 @@ function wobble_linesegment_points(points::AbstractVector{P}, amplitude, wavelen
             continue
         end
 
-        segment_idx += UInt32(1)
         amp = min(amplitude, 0.45 * seglen, 0.45 * wavelength)
         nx = -dy / seglen
         ny = dx / seglen
-        phase1 = wobble_phase(seed, UInt32(2) * segment_idx)
-        phase2 = wobble_phase(seed, UInt32(2) * segment_idx + UInt32(1))
         nsamples = max(2, Int(ceil(seglen / ds)) + 1)
 
         prev = p0
         prev_t = 0.0
+        cursor = 0.0
         for k in 1:(nsamples - 1)
             t = k / (nsamples - 1)
             base = ifelse(t >= 1.0, p1, lerp(p0, p1, t))
-            offset = wobble_offset(t * seglen, seglen, amp, wavelength, phase1, phase2)
+            rand_idx += UInt32(1)
+            cursor += wobble_walk_step(wobble_rand(seed, rand_idx), log_randomness)
+            offset = wobble_walk_offset(cursor, phase_scale, amp)
             curr = P(base[1] + offset * nx, base[2] + offset * ny)
             push!(output, prev, curr)
             append!(left_idx, (i, i))
