@@ -135,6 +135,17 @@ end
     _, _, pl_other_seed = lines(xs, ys; wobble = 0.03, wobble_seed = 12)
     @test pl_same_seed.wobbly_positions[] == pl.wobbly_positions[]
     @test pl_other_seed.wobbly_positions[] != pl.wobbly_positions[]
+    _, _, pl_tight = lines(xs, ys; wobble = 0.03, wobble_scale = 0.05, wobble_seed = 11)
+    _, _, pl_loose = lines(xs, ys; wobble = 0.03, wobble_scale = 0.5, wobble_seed = 11)
+    @test length(pl_tight.wobbly_positions[]) > length(pl_loose.wobbly_positions[])
+
+    sparse_x = collect(range(0.0f0, 1.0f0, length = 8))
+    dense_x = collect(range(0.0f0, 1.0f0, length = 80))
+    sparse_y = zero.(sparse_x)
+    dense_y = zero.(dense_x)
+    _, _, pl_sparse = lines(sparse_x, sparse_y; wobble = 0.03, wobble_seed = 9)
+    _, _, pl_dense = lines(dense_x, dense_y; wobble = 0.03, wobble_seed = 9)
+    @test length(pl_sparse.wobbly_positions[]) == length(pl_dense.wobbly_positions[])
 
     seg_points = Point2f[(0, 0), (1, 0), (0, 1), (1, 1)]
     _, _, seg = linesegments(seg_points; linewidth = [1.0, 1.0], wobble = 0.03, wobble_seed = 2)

@@ -891,17 +891,6 @@ end
 
 @inline wobble_rand(seed::UInt32, idx::UInt32) = Float64(wobble_hash(seed, idx)) / Float64(typemax(UInt32))
 
-function wobble_point(::Type{P}, p0, p1, t, nx, ny, amplitude, phase1, phase2) where {P}
-    envelope = 4.0 * t * (1.0 - t)
-    bend = sin(2.0 * pi * t + phase1) + 0.5 * sin(4.0 * pi * t + phase2)
-    offset = 0.35 * amplitude * envelope * bend
-    x = lerp(p0[1], p1[1], t) + offset * nx
-    y = lerp(p0[2], p1[2], t) + offset * ny
-    return P(x, y)
-end
-
-wobble_subdivisions(seglen, span) = clamp(ceil(Int, seglen / max(1.0e-6, 0.15 * span)), 2, 12)
-
 function line_span(points)
     xmin, xmax = Inf, -Inf
     ymin, ymax = Inf, -Inf
@@ -916,6 +905,91 @@ function line_span(points)
         found = true
     end
     return found ? hypot(xmax - xmin, ymax - ymin) : 0.0
+end
+
+function resolve_wobble_scale(wobble_scale, span, amplitude)
+    default_scale = max(1.0e-6, max(0.1 * span, 4.0 * amplitude))
+    wobble_scale === automatic && return default_scale
+    wobble_scale isa Number || return default_scale
+    scale = Float64(wobble_scale)
+    return ifelse(isfinite(scale) && (scale > 0.0), scale, default_scale)
+end
+
+wobble_step(wavelength) = max(wavelength / 6.0, 1.0e-6)
+wobble_phase(seed, idx) = 2.0 * pi * wobble_rand(seed, idx)
+
+function point_normal(points, i)
+    N = length(points)
+    i1 = max(1, i - 1)
+    i2 = min(N, i + 1)
+    dx = points[i2][1] - points[i1][1]
+    dy = points[i2][2] - points[i1][2]
+    n = hypot(dx, dy)
+    if !isfinite(n) || n <= 0.0
+        return 0.0, 0.0
+    end
+    return -dy / n, dx / n
+end
+
+function wobble_offset(s, total, amplitude, wavelength, phase1, phase2)
+    u = clamp(s / total, 0.0, 1.0)
+    envelope = 4.0 * u * (1.0 - u)
+    w = 2.0 * pi / wavelength
+    bend = sin(w * s + phase1) + 0.5 * sin(2.0 * w * s + phase2)
+    return 0.35 * amplitude * envelope * bend
+end
+
+function resample_polyline_run(points::AbstractVector{P}, global_idx::AbstractVector{Int}, ds::Float64) where {P <: Point}
+    N = length(points)
+    N == 0 && return P[], Int[], Int[], Float64[], Float64[], 0.0
+    if N == 1
+        return copy(points), [global_idx[1]], [global_idx[1]], [0.0], [0.0], 0.0
+    end
+
+    lengths = zeros(Float64, N)
+    for i in 2:N
+        dx = points[i][1] - points[i - 1][1]
+        dy = points[i][2] - points[i - 1][2]
+        seglen = hypot(dx, dy)
+        lengths[i] = lengths[i - 1] + ifelse(isfinite(seglen), seglen, 0.0)
+    end
+    total = lengths[end]
+    if !isfinite(total) || total <= 0.0
+        return copy(points), collect(global_idx), collect(global_idx), zeros(Float64, N), zeros(Float64, N), 0.0
+    end
+
+    nsamples = max(2, Int(ceil(total / ds)) + 1)
+    sgrid = range(0.0, total, length = nsamples)
+    sampled = Vector{P}(undef, nsamples)
+    left_idx = Vector{Int}(undef, nsamples)
+    right_idx = Vector{Int}(undef, nsamples)
+    ts = Vector{Float64}(undef, nsamples)
+    svals = Vector{Float64}(undef, nsamples)
+
+    seg = 1
+    for (k, s) in enumerate(sgrid)
+        while seg < N - 1 && s > lengths[seg + 1]
+            seg += 1
+        end
+        s0 = lengths[seg]
+        s1 = lengths[seg + 1]
+        len = s1 - s0
+        t = ifelse(len <= 0.0, 0.0, clamp((s - s0) / len, 0.0, 1.0))
+        p = if t <= 0.0
+            points[seg]
+        elseif t >= 1.0
+            points[seg + 1]
+        else
+            lerp(points[seg], points[seg + 1], t)
+        end
+        sampled[k] = p
+        left_idx[k] = global_idx[seg]
+        right_idx[k] = global_idx[seg + 1]
+        ts[k] = t
+        svals[k] = s
+    end
+
+    return sampled, left_idx, right_idx, ts, svals, total
 end
 
 function maybe_lerp(a, b, t)
@@ -941,12 +1015,13 @@ function resample_line_attribute(attr, left_idx, right_idx, ts, n_in)
     end
 end
 
-function wobble_polyline_points(points::AbstractVector{P}, amplitude, span, seed::UInt32) where {P <: Point}
+function wobble_polyline_points(points::AbstractVector{P}, amplitude, wavelength, seed::UInt32) where {P <: Point}
     output = P[]
     left_idx = Int[]
     right_idx = Int[]
     ts = Float64[]
-    segment_idx = UInt32(0)
+    run_idx = UInt32(0)
+    ds = wobble_step(wavelength)
     i = 1
     N = length(points)
 
@@ -966,58 +1041,39 @@ function wobble_polyline_points(points::AbstractVector{P}, amplitude, span, seed
         end
         run_end = i - 1
 
-        push!(output, points[run_start])
-        push!(left_idx, run_start)
-        push!(right_idx, run_start)
-        push!(ts, 0.0)
+        run_points = @view points[run_start:run_end]
+        global_idx = run_start:run_end
+        sampled, run_left, run_right, run_ts, svals, total = resample_polyline_run(run_points, global_idx, ds)
+        run_idx += UInt32(1)
+        phase1 = wobble_phase(seed, UInt32(2) * run_idx)
+        phase2 = wobble_phase(seed, UInt32(2) * run_idx + UInt32(1))
+        amp = min(amplitude, 0.45 * wavelength, 0.45 * total)
 
-        for j in run_start:(run_end - 1)
-            p0 = points[j]
-            p1 = points[j + 1]
-            dx = p1[1] - p0[1]
-            dy = p1[2] - p0[2]
-            seglen = hypot(dx, dy)
-
-            if !(isfinite(seglen) && seglen > 0.0)
-                push!(output, p1)
-                push!(left_idx, j + 1)
-                push!(right_idx, j + 1)
-                push!(ts, 0.0)
-                continue
+        if amp > 0.0 && total > 0.0
+            for k in eachindex(sampled)
+                nx, ny = point_normal(sampled, k)
+                offset = wobble_offset(svals[k], total, amp, wavelength, phase1, phase2)
+                p = sampled[k]
+                sampled[k] = P(p[1] + offset * nx, p[2] + offset * ny)
             end
-
-            segment_idx += UInt32(1)
-            amp = min(amplitude, 0.45 * seglen)
-            subdivisions = wobble_subdivisions(seglen, span)
-            nx = -dy / seglen
-            ny = dx / seglen
-            phase1 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx)
-            phase2 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx + UInt32(1))
-
-            for k in 1:(subdivisions - 1)
-                t = k / subdivisions
-                push!(output, wobble_point(P, p0, p1, t, nx, ny, amp, phase1, phase2))
-                push!(left_idx, j)
-                push!(right_idx, j + 1)
-                push!(ts, t)
-            end
-
-            push!(output, p1)
-            push!(left_idx, j + 1)
-            push!(right_idx, j + 1)
-            push!(ts, 0.0)
         end
+
+        append!(output, sampled)
+        append!(left_idx, run_left)
+        append!(right_idx, run_right)
+        append!(ts, run_ts)
     end
 
     return output, left_idx, right_idx, ts
 end
 
-function wobble_linesegment_points(points::AbstractVector{P}, amplitude, span, seed::UInt32) where {P <: Point}
+function wobble_linesegment_points(points::AbstractVector{P}, amplitude, wavelength, seed::UInt32) where {P <: Point}
     output = P[]
     left_idx = Int[]
     right_idx = Int[]
     ts = Float64[]
     segment_idx = UInt32(0)
+    ds = wobble_step(wavelength)
     N = length(points)
     i = 1
 
@@ -1047,22 +1103,20 @@ function wobble_linesegment_points(points::AbstractVector{P}, amplitude, span, s
         end
 
         segment_idx += UInt32(1)
-        amp = min(amplitude, 0.45 * seglen)
-        subdivisions = wobble_subdivisions(seglen, span)
+        amp = min(amplitude, 0.45 * seglen, 0.45 * wavelength)
         nx = -dy / seglen
         ny = dx / seglen
-        phase1 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx)
-        phase2 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx + UInt32(1))
+        phase1 = wobble_phase(seed, UInt32(2) * segment_idx)
+        phase2 = wobble_phase(seed, UInt32(2) * segment_idx + UInt32(1))
+        nsamples = max(2, Int(ceil(seglen / ds)) + 1)
 
         prev = p0
         prev_t = 0.0
-        for k in 1:subdivisions
-            t = k / subdivisions
-            curr = ifelse(
-                k == subdivisions,
-                p1,
-                wobble_point(P, p0, p1, t, nx, ny, amp, phase1, phase2)
-            )
+        for k in 1:(nsamples - 1)
+            t = k / (nsamples - 1)
+            base = ifelse(t >= 1.0, p1, lerp(p0, p1, t))
+            offset = wobble_offset(t * seglen, seglen, amp, wavelength, phase1, phase2)
+            curr = P(base[1] + offset * nx, base[2] + offset * ny)
             push!(output, prev, curr)
             append!(left_idx, (i, i))
             append!(right_idx, (i + 1, i + 1))
@@ -1085,7 +1139,7 @@ function wobble_linesegment_points(points::AbstractVector{P}, amplitude, span, s
 end
 
 function line_wobble(
-        points::AbstractVector{<:Point}, color, linewidth, wobble, wobble_seed, is_segments::Bool
+        points::AbstractVector{<:Point}, color, linewidth, wobble, wobble_scale, wobble_seed, is_segments::Bool
     )
     point_ndims(eltype(points)) == 2 || return points, color, linewidth
 
@@ -1101,12 +1155,13 @@ function line_wobble(
 
     amplitude = wobble_strength * span
     amplitude > 0.0 || return points, color, linewidth
+    wavelength = resolve_wobble_scale(wobble_scale, span, amplitude)
     seed = UInt32(mod(hash(wobble_seed), Int64(typemax(UInt32)) + 1))
 
     wobbly_points, left_idx, right_idx, ts = if is_segments
-        wobble_linesegment_points(points, amplitude, span, seed)
+        wobble_linesegment_points(points, amplitude, wavelength, seed)
     else
-        wobble_polyline_points(points, amplitude, span, seed)
+        wobble_polyline_points(points, amplitude, wavelength, seed)
     end
 
     n_in = length(points)
@@ -1126,13 +1181,13 @@ function register_line_wobble!(
         output_linewidth::Symbol = :wobbly_linewidth,
     )
     return register_computation!(
-        attr, [positions_name, color_name, linewidth_name, :wobble, :wobble_seed],
+        attr, [positions_name, color_name, linewidth_name, :wobble, :wobble_scale, :wobble_seed],
         [output_positions, output_color, output_linewidth]
-    ) do (positions, color, linewidth, wobble, wobble_seed), _, _
+    ) do (positions, color, linewidth, wobble, wobble_scale, wobble_seed), _, _
         if !(positions isa AbstractVector) || isempty(positions)
             return (positions, color, linewidth)
         end
-        return line_wobble(positions, color, linewidth, wobble, wobble_seed, is_segments)
+        return line_wobble(positions, color, linewidth, wobble, wobble_scale, wobble_seed, is_segments)
     end
 end
 

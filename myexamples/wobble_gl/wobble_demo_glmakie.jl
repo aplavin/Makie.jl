@@ -14,12 +14,15 @@ function make_wobble_figure()
             linecap = :round,
             joinstyle = :round,
             wobble = 0.018,
+            wobble_scale = 0.22,
             wobble_seed = 777,
         ),
         LineSegments = (
             linewidth = 1.7,
             linecap = :round,
             wobble = 0.018,
+            # Axis/grid/ticks use LineSegments in pixel-space, so they need a larger scale.
+            wobble_scale = 16.0,
             wobble_seed = 777,
         ),
         Axis = (
@@ -69,13 +72,13 @@ function make_wobble_figure()
 
         ax2 = Axis(
             fig[1, 2],
-            title = "Same Data, Different wobble_seed",
+            title = "Same Data, Different wobble_scale",
             xlabel = "x",
             ylabel = "y",
         )
         y = sin.(x) .+ 0.09 .* sin.(8x)
-        lines!(ax2, x, y, color = Cycled(1), wobble_seed = 10, label = "seed = 10")
-        lines!(ax2, x, y .- 1.1, color = Cycled(4), wobble_seed = 999, label = "seed = 999")
+        lines!(ax2, x, y, color = Cycled(1), wobble_seed = 10, wobble_scale = 0.09, label = "scale = 0.09")
+        lines!(ax2, x, y .- 1.1, color = Cycled(4), wobble_seed = 10, wobble_scale = 0.45, label = "scale = 0.45")
         axislegend(ax2, position = :rb, framevisible = false)
 
         ax3 = Axis(

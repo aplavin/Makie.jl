@@ -436,6 +436,8 @@ Creates a connected line plot for each element in `(x, y, z)`, `(x, y)` or `posi
     larger than `0` to enable wobble.
     """
     wobble = 0.0
+    "Sets the wobble wavelength in plot units. If `automatic`, a scale is derived from line span and wobble amplitude."
+    wobble_scale = automatic
     "Seed controlling deterministic wobble generation."
     wobble_seed = 0
     mixin_generic_plot_attributes()...
@@ -480,6 +482,8 @@ Plots a line for each pair of points in `(x, y, z)`, `(x, y)`, or `positions`.
     larger than `0` to enable wobble.
     """
     wobble = 0.0
+    "Sets the wobble wavelength in plot units. If `automatic`, a scale is derived from line span and wobble amplitude."
+    wobble_scale = automatic
     "Seed controlling deterministic wobble generation."
     wobble_seed = 0
     mixin_generic_plot_attributes()...
