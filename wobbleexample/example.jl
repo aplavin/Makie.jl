@@ -6,9 +6,10 @@ function set_xkcd_text_theme!()
 
     set_theme!(
         font = font_path,
-        fontsize = 18,
+        fontsize = 16,
+        linewidth = 2.0,
         Figure = (
-            fontsize = 18,
+            fontsize = 16
         ),
         Axis = (
             titlefont = font_path,
@@ -16,15 +17,32 @@ function set_xkcd_text_theme!()
             ylabelfont = font_path,
             xticklabelfont = font_path,
             yticklabelfont = font_path,
-            titlesize = 26,
-            xlabelsize = 22,
-            ylabelsize = 22,
-            xticklabelsize = 18,
-            yticklabelsize = 18,
+            titlesize = 22,
+            xlabelsize = 20,
+            ylabelsize = 20,
+            xticklabelsize = 16,
+            yticklabelsize = 16,
+            xgridvisible = false,
+            ygridvisible = false,
+            xgridwidth = 0.0,
+            ygridwidth = 0.0,
+            spinewidth = 1.5,
+            topspinevisible = false,
+            bottomspinecolor = :black,
+            leftspinecolor = :black,
+            rightspinevisible = false,
+            xticksize = 8,
+            yticksize = 8,
+            xtickwidth = 3,
+            ytickwidth = 3,
+            xtickcolor = :black,
+            ytickcolor = :black,
+            xminorticksvisible = false,
+            yminorticksvisible = false,
         ),
         Legend = (
             labelfont = font_path,
-            labelsize = 18,
+            labelsize = 16,
         ),
     )
     return font_path
@@ -84,11 +102,9 @@ function make_figure()
 
     ax = Axis(
         fig[1, 1],
-        title = "Global GLMakie Wobble (all lines, spines, grid)",
+        title = "Global GLMakie Wobble",
         xlabel = "x",
         ylabel = "y",
-        xgridvisible = true,
-        ygridvisible = true,
     )
 
     add_demo_lines!(ax)
