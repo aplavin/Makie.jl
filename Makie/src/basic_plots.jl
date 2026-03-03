@@ -431,6 +431,13 @@ Creates a connected line plot for each element in `(x, y, z)`, `(x, y)` or `posi
     - map multiple cycled attributes to a palette attribute, e.g. `[:linecolor, :markercolor] => :color`
     """
     cycle = [:color]
+    """
+    Adds deterministic hand-drawn jitter to line geometry. Set this to a value
+    larger than `0` to enable wobble.
+    """
+    wobble = 0.0
+    "Seed controlling deterministic wobble generation."
+    wobble_seed = 0
     mixin_generic_plot_attributes()...
     mixin_colormap_attributes()...
     fxaa = false
@@ -468,6 +475,13 @@ Plots a line for each pair of points in `(x, y, z)`, `(x, y)`, or `positions`.
     - map multiple cycled attributes to a palette attribute, e.g. `[:linecolor, :markercolor] => :color`
     """
     cycle = [:color]
+    """
+    Adds deterministic hand-drawn jitter to line geometry. Set this to a value
+    larger than `0` to enable wobble.
+    """
+    wobble = 0.0
+    "Seed controlling deterministic wobble generation."
+    wobble_seed = 0
     mixin_generic_plot_attributes()...
     mixin_colormap_attributes()...
     fxaa = false

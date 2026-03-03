@@ -877,6 +877,265 @@ function attribute_per_pos!(attr, attribute::Symbol, output_name::Symbol)
     end
 end
 
+point_is_nan(p) = any(isnan, p)
+point_ndims(::Type{<:Point{N}}) where {N} = N
+
+@inline function wobble_hash(seed::UInt32, idx::UInt32)
+    x = seed ⊻ (idx + UInt32(0x9e3779b9))
+    x = x ⊻ (x >>> 16)
+    x *= UInt32(0x7feb352d)
+    x = x ⊻ (x >>> 15)
+    x *= UInt32(0x846ca68b)
+    return x ⊻ (x >>> 16)
+end
+
+@inline wobble_rand(seed::UInt32, idx::UInt32) = Float64(wobble_hash(seed, idx)) / Float64(typemax(UInt32))
+
+function wobble_point(::Type{P}, p0, p1, t, nx, ny, amplitude, phase1, phase2) where {P}
+    envelope = 4.0 * t * (1.0 - t)
+    bend = sin(2.0 * pi * t + phase1) + 0.5 * sin(4.0 * pi * t + phase2)
+    offset = 0.35 * amplitude * envelope * bend
+    x = lerp(p0[1], p1[1], t) + offset * nx
+    y = lerp(p0[2], p1[2], t) + offset * ny
+    return P(x, y)
+end
+
+wobble_subdivisions(seglen, span) = clamp(ceil(Int, seglen / max(1.0e-6, 0.15 * span)), 2, 12)
+
+function line_span(points)
+    xmin, xmax = Inf, -Inf
+    ymin, ymax = Inf, -Inf
+    found = false
+    for p in points
+        point_is_nan(p) && continue
+        x, y = p[1], p[2]
+        xmin = min(xmin, x)
+        xmax = max(xmax, x)
+        ymin = min(ymin, y)
+        ymax = max(ymax, y)
+        found = true
+    end
+    return found ? hypot(xmax - xmin, ymax - ymin) : 0.0
+end
+
+function maybe_lerp(a, b, t)
+    if t <= 0.0 || a === b
+        return a
+    elseif t >= 1.0
+        return b
+    elseif applicable(lerp, a, b, t)
+        return lerp(a, b, t)
+    else
+        return ifelse(t < 0.5, a, b)
+    end
+end
+
+function resample_line_attribute(attr, left_idx, right_idx, ts, n_in)
+    if !(attr isa AbstractVector) || length(attr) != n_in
+        return attr
+    end
+    return map(eachindex(left_idx)) do k
+        i1 = left_idx[k]
+        i2 = right_idx[k]
+        return maybe_lerp(attr[i1], attr[i2], ts[k])
+    end
+end
+
+function wobble_polyline_points(points::AbstractVector{P}, amplitude, span, seed::UInt32) where {P <: Point}
+    output = P[]
+    left_idx = Int[]
+    right_idx = Int[]
+    ts = Float64[]
+    segment_idx = UInt32(0)
+    i = 1
+    N = length(points)
+
+    while i <= N
+        if point_is_nan(points[i])
+            push!(output, points[i])
+            push!(left_idx, i)
+            push!(right_idx, i)
+            push!(ts, 0.0)
+            i += 1
+            continue
+        end
+
+        run_start = i
+        while i <= N && !point_is_nan(points[i])
+            i += 1
+        end
+        run_end = i - 1
+
+        push!(output, points[run_start])
+        push!(left_idx, run_start)
+        push!(right_idx, run_start)
+        push!(ts, 0.0)
+
+        for j in run_start:(run_end - 1)
+            p0 = points[j]
+            p1 = points[j + 1]
+            dx = p1[1] - p0[1]
+            dy = p1[2] - p0[2]
+            seglen = hypot(dx, dy)
+
+            if !(isfinite(seglen) && seglen > 0.0)
+                push!(output, p1)
+                push!(left_idx, j + 1)
+                push!(right_idx, j + 1)
+                push!(ts, 0.0)
+                continue
+            end
+
+            segment_idx += UInt32(1)
+            amp = min(amplitude, 0.45 * seglen)
+            subdivisions = wobble_subdivisions(seglen, span)
+            nx = -dy / seglen
+            ny = dx / seglen
+            phase1 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx)
+            phase2 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx + UInt32(1))
+
+            for k in 1:(subdivisions - 1)
+                t = k / subdivisions
+                push!(output, wobble_point(P, p0, p1, t, nx, ny, amp, phase1, phase2))
+                push!(left_idx, j)
+                push!(right_idx, j + 1)
+                push!(ts, t)
+            end
+
+            push!(output, p1)
+            push!(left_idx, j + 1)
+            push!(right_idx, j + 1)
+            push!(ts, 0.0)
+        end
+    end
+
+    return output, left_idx, right_idx, ts
+end
+
+function wobble_linesegment_points(points::AbstractVector{P}, amplitude, span, seed::UInt32) where {P <: Point}
+    output = P[]
+    left_idx = Int[]
+    right_idx = Int[]
+    ts = Float64[]
+    segment_idx = UInt32(0)
+    N = length(points)
+    i = 1
+
+    while i < N
+        p0 = points[i]
+        p1 = points[i + 1]
+
+        if point_is_nan(p0) || point_is_nan(p1)
+            push!(output, p0, p1)
+            append!(left_idx, (i, i + 1))
+            append!(right_idx, (i, i + 1))
+            append!(ts, (0.0, 0.0))
+            i += 2
+            continue
+        end
+
+        dx = p1[1] - p0[1]
+        dy = p1[2] - p0[2]
+        seglen = hypot(dx, dy)
+        if !(isfinite(seglen) && seglen > 0.0)
+            push!(output, p0, p1)
+            append!(left_idx, (i, i + 1))
+            append!(right_idx, (i, i + 1))
+            append!(ts, (0.0, 0.0))
+            i += 2
+            continue
+        end
+
+        segment_idx += UInt32(1)
+        amp = min(amplitude, 0.45 * seglen)
+        subdivisions = wobble_subdivisions(seglen, span)
+        nx = -dy / seglen
+        ny = dx / seglen
+        phase1 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx)
+        phase2 = 2.0 * pi * wobble_rand(seed, UInt32(2) * segment_idx + UInt32(1))
+
+        prev = p0
+        prev_t = 0.0
+        for k in 1:subdivisions
+            t = k / subdivisions
+            curr = ifelse(
+                k == subdivisions,
+                p1,
+                wobble_point(P, p0, p1, t, nx, ny, amp, phase1, phase2)
+            )
+            push!(output, prev, curr)
+            append!(left_idx, (i, i))
+            append!(right_idx, (i + 1, i + 1))
+            append!(ts, (prev_t, t))
+            prev = curr
+            prev_t = t
+        end
+
+        i += 2
+    end
+
+    if i == N
+        push!(output, points[end])
+        push!(left_idx, N)
+        push!(right_idx, N)
+        push!(ts, 0.0)
+    end
+
+    return output, left_idx, right_idx, ts
+end
+
+function line_wobble(
+        points::AbstractVector{<:Point}, color, linewidth, wobble, wobble_seed, is_segments::Bool
+    )
+    point_ndims(eltype(points)) == 2 || return points, color, linewidth
+
+    can_resize_color = !(color isa AbstractVector) || length(color) == length(points)
+    can_resize_linewidth = !(linewidth isa AbstractVector) || length(linewidth) == length(points)
+    (can_resize_color && can_resize_linewidth) || return points, color, linewidth
+
+    wobble_strength = Float64(wobble)
+    (!isfinite(wobble_strength) || wobble_strength <= 0.0) && return points, color, linewidth
+
+    span = line_span(points)
+    isfinite(span) && span > 0.0 || return points, color, linewidth
+
+    amplitude = wobble_strength * span
+    amplitude > 0.0 || return points, color, linewidth
+    seed = UInt32(mod(hash(wobble_seed), Int64(typemax(UInt32)) + 1))
+
+    wobbly_points, left_idx, right_idx, ts = if is_segments
+        wobble_linesegment_points(points, amplitude, span, seed)
+    else
+        wobble_polyline_points(points, amplitude, span, seed)
+    end
+
+    n_in = length(points)
+    wobbly_color = resample_line_attribute(color, left_idx, right_idx, ts, n_in)
+    wobbly_linewidth = resample_line_attribute(linewidth, left_idx, right_idx, ts, n_in)
+    return wobbly_points, wobbly_color, wobbly_linewidth
+end
+
+function register_line_wobble!(
+        attr::ComputeGraph;
+        is_segments::Bool,
+        positions_name::Symbol = :positions,
+        color_name::Symbol = :color,
+        linewidth_name::Symbol = :linewidth,
+        output_positions::Symbol = :wobbly_positions,
+        output_color::Symbol = :wobbly_color,
+        output_linewidth::Symbol = :wobbly_linewidth,
+    )
+    return register_computation!(
+        attr, [positions_name, color_name, linewidth_name, :wobble, :wobble_seed],
+        [output_positions, output_color, output_linewidth]
+    ) do (positions, color, linewidth, wobble, wobble_seed), _, _
+        if !(positions isa AbstractVector) || isempty(positions)
+            return (positions, color, linewidth)
+        end
+        return line_wobble(positions, color, linewidth, wobble, wobble_seed, is_segments)
+    end
+end
+
 
 function color_per_mesh(ccolors, vertes_per_mesh)
     result = similar(ccolors, float32type(ccolors), sum(vertes_per_mesh))
@@ -1021,17 +1280,41 @@ end
 
 function calculated_attributes!(::Type{Lines}, plot::Plot)
     attr = plot.attributes
-    register_colormapping!(attr)
-    map!(identity, attr, :linewidth, :uniform_linewidth)
-    return calculated_attributes!(PointBased(), plot)
+    register_line_wobble!(attr; is_segments = false)
+    register_colormapping!(attr, :wobbly_color)
+    map!(identity, attr, :wobbly_linewidth, :uniform_linewidth)
+    map!(attr, :positions, :data_limits) do positions
+        return Rect3d(positions)
+    end
+    return register_position_transforms!(
+        attr;
+        input_name = :wobbly_positions,
+        transformed_name = :positions_transformed,
+        transformed_f32c_name = :positions_transformed_f32c,
+    )
 end
 
 function calculated_attributes!(::Type{LineSegments}, plot::Plot)
     attr = plot.attributes
     attribute_per_pos!(attr, :color, :synched_color)
-    register_colormapping!(attr, :synched_color)
-    attribute_per_pos!(attr, :linewidth, :uniform_linewidth)
-    return calculated_attributes!(PointBased(), plot)
+    attribute_per_pos!(attr, :linewidth, :synched_linewidth)
+    register_line_wobble!(
+        attr;
+        is_segments = true,
+        color_name = :synched_color,
+        linewidth_name = :synched_linewidth,
+    )
+    register_colormapping!(attr, :wobbly_color)
+    map!(identity, attr, :wobbly_linewidth, :uniform_linewidth)
+    map!(attr, :positions, :data_limits) do positions
+        return Rect3d(positions)
+    end
+    return register_position_transforms!(
+        attr;
+        input_name = :wobbly_positions,
+        transformed_name = :positions_transformed,
+        transformed_f32c_name = :positions_transformed_f32c,
+    )
 end
 
 function calculated_attributes!(::Type{Mesh}, plot::Plot)

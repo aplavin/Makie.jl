@@ -120,6 +120,36 @@ end
     @test pl2.scaled_color[] == cpalette[1]
 end
 
+@testset "Line Wobble" begin
+    xs = collect(range(0.0f0, 1.0f0, length = 8))
+    ys = sin.(2f0 * Float32(pi) .* xs)
+    color = collect(range(0.0f0, 1.0f0, length = length(xs)))
+    linewidth = collect(range(1.0f0, 2.0f0, length = length(xs)))
+
+    f, ax, pl = lines(xs, ys; color, linewidth, wobble = 0.03, wobble_seed = 11)
+    @test length(pl.wobbly_positions[]) > length(pl.positions[])
+    @test length(pl.wobbly_color[]) == length(pl.wobbly_positions[])
+    @test length(pl.wobbly_linewidth[]) == length(pl.wobbly_positions[])
+
+    _, _, pl_same_seed = lines(xs, ys; wobble = 0.03, wobble_seed = 11)
+    _, _, pl_other_seed = lines(xs, ys; wobble = 0.03, wobble_seed = 12)
+    @test pl_same_seed.wobbly_positions[] == pl.wobbly_positions[]
+    @test pl_other_seed.wobbly_positions[] != pl.wobbly_positions[]
+
+    seg_points = Point2f[(0, 0), (1, 0), (0, 1), (1, 1)]
+    _, _, seg = linesegments(seg_points; linewidth = [1.0, 1.0], wobble = 0.03, wobble_seed = 2)
+    @test length(seg.wobbly_positions[]) > length(seg.positions[])
+    @test iseven(length(seg.wobbly_positions[]))
+    @test length(seg.wobbly_linewidth[]) == length(seg.wobbly_positions[])
+
+    with_theme(Theme(LineSegments = (wobble = 0.03, wobble_seed = 3))) do
+        fig = Figure()
+        ax = Axis(fig[1, 1], xgridvisible = true, ygridvisible = true)
+        xgrid = ax.elements[:xgridlines]
+        @test length(xgrid.wobbly_positions[]) > length(xgrid.positions[])
+    end
+end
+
 function test_default(arg)
     _, _, pl1 = plot(arg)
 
