@@ -69,9 +69,11 @@ end
 
 GLMakie.activate!()
 GLMakie.GLOBAL_LINE_WOBBLE.strength = 1.2f0
-GLMakie.GLOBAL_LINE_WOBBLE.amplitude_px = 2.0f0
-GLMakie.GLOBAL_LINE_WOBBLE.freq_1 = 0.13f0
-GLMakie.GLOBAL_LINE_WOBBLE.freq_2 = 0.31f0
+GLMakie.GLOBAL_LINE_WOBBLE.amplitude_px = 1.6f0
+GLMakie.GLOBAL_LINE_WOBBLE.freq_1 = 0.07f0
+GLMakie.GLOBAL_LINE_WOBBLE.freq_2 = 0.16f0
+GLMakie.GLOBAL_LINE_WOBBLE.length_px = 100.0f0
+GLMakie.GLOBAL_LINE_WOBBLE.randomness = 2.0f0
 
 fig = make_figure()
 output_path = joinpath(@__DIR__, "wobble_lines_demo.png")

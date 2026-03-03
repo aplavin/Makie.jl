@@ -11,8 +11,10 @@ const DEBUG = Ref(false)
 Base.@kwdef mutable struct LineWobbleConfig
     strength::Float32 = 1.0f0
     amplitude_px::Float32 = 1.6f0
-    freq_1::Float32 = 0.13f0
-    freq_2::Float32 = 0.31f0
+    freq_1::Float32 = 0.07f0
+    freq_2::Float32 = 0.16f0
+    length_px::Float32 = 100.0f0
+    randomness::Float32 = 2.0f0
 end
 
 const GLOBAL_LINE_WOBBLE = LineWobbleConfig()

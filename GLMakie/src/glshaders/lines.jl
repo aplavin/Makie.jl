@@ -63,8 +63,10 @@ function draw_lines(screen, position::Union{VectorTypes{T}, MatTypes{T}}, data::
         pattern_length = 1.0f0 # we divide by pattern_length a lot.
         line_wobble = 0.0f0
         line_wobble_amplitude_px = 1.6f0
-        line_wobble_freq_1 = 0.13f0
-        line_wobble_freq_2 = 0.31f0
+        line_wobble_freq_1 = 0.07f0
+        line_wobble_freq_2 = 0.16f0
+        line_wobble_length_px = 100.0f0
+        line_wobble_randomness = 2.0f0
         debug = false
         px_per_unit = 1.0f0
     end
@@ -99,8 +101,10 @@ function draw_linesegments(screen, positions::VectorTypes{T}, data::Dict) where 
         pattern_length = 1.0f0
         line_wobble = 0.0f0
         line_wobble_amplitude_px = 1.6f0
-        line_wobble_freq_1 = 0.13f0
-        line_wobble_freq_2 = 0.31f0
+        line_wobble_freq_1 = 0.07f0
+        line_wobble_freq_2 = 0.16f0
+        line_wobble_length_px = 100.0f0
+        line_wobble_randomness = 2.0f0
         debug = false
         px_per_unit = 1.0f0
     end

@@ -37,6 +37,8 @@ uniform float line_wobble;
 uniform float line_wobble_amplitude_px;
 uniform float line_wobble_freq_1;
 uniform float line_wobble_freq_2;
+uniform float line_wobble_length_px;
+uniform float line_wobble_randomness;
 
 {{color_map_type}} color_map;
 {{color_norm_type}} color_norm;
@@ -56,10 +58,57 @@ float aastep(float threshold1, float dist) {
     return smoothstep(threshold1-AA_RADIUS, threshold1+AA_RADIUS, dist);
 }
 
+float hash11(float p) {
+    p = fract(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return fract(p);
+}
+
+float value_noise(float x, float seed) {
+    float i = floor(x);
+    float f = fract(x);
+    float u = f * f * (3.0 - 2.0 * f);
+    float a = hash11(i + 37.0 * seed + 0.17);
+    float b = hash11(i + 1.0 + 37.0 * seed + 0.17);
+    return mix(a, b, u);
+}
+
+float signed_noise(float x, float seed) {
+    return 2.0 * value_noise(x, seed) - 1.0;
+}
+
+float sketch_s(float s, float seed) {
+    float length_px = max(4.0, line_wobble_length_px);
+    float t = s / length_px;
+
+    float n_low = signed_noise(0.73 * t + 11.0, seed + 0.7);
+    float n_mid = signed_noise(1.91 * t + 29.0, seed + 2.1);
+    float n_high = signed_noise(3.43 * t + 47.0, seed + 4.3);
+
+    float randomness = max(1.0, line_wobble_randomness);
+    float random_strength = min(3.0, randomness - 1.0);
+
+    // Matplotlib-like "randomized wavelength" approximated by a smooth domain warp.
+    float warp = random_strength * length_px * (0.14 * n_low + 0.05 * n_mid + 0.02 * n_high);
+    float drift = random_strength * 0.07 * length_px * signed_noise(0.31 * t + 5.0, seed + 8.9);
+
+    return s + warp + drift;
+}
+
 float wobble_profile(float s, float phase) {
-    float a = sin(line_wobble_freq_1 * s + phase);
-    float b = sin(line_wobble_freq_2 * s + 1.73 * phase + 0.4);
-    return (a + 0.45 * b) / 1.45;
+    float seed = phase * 0.15915494 + 0.001 * f_wobble_shift;
+    float s1 = sketch_s(s, seed + 1.0);
+    float s2 = sketch_s(s + 0.35 * line_wobble_length_px, seed + 7.0);
+
+    float a = sin(line_wobble_freq_1 * s1 + phase);
+    float b = sin(line_wobble_freq_2 * s2 + 1.73 * phase + 0.4);
+
+    float grain = signed_noise(2.4 * s / max(8.0, line_wobble_length_px) + 19.0, seed + 13.0);
+    float random_strength = min(3.0, max(1.0, line_wobble_randomness) - 1.0);
+    float grain_weight = 0.02 + 0.03 * random_strength;
+
+    return (a + 0.32 * b + grain_weight * grain) / (1.32 + grain_weight);
 }
 
 ////////////////////////////////////////////////////////////////////////

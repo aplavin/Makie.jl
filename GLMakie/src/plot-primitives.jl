@@ -574,12 +574,16 @@ end
 @inline global_line_wobble_amplitude_px() = max(0.0f0, Float32(GLOBAL_LINE_WOBBLE.amplitude_px))
 @inline global_line_wobble_freq_1() = Float32(GLOBAL_LINE_WOBBLE.freq_1)
 @inline global_line_wobble_freq_2() = Float32(GLOBAL_LINE_WOBBLE.freq_2)
+@inline global_line_wobble_length_px() = max(1.0f0, Float32(GLOBAL_LINE_WOBBLE.length_px))
+@inline global_line_wobble_randomness() = max(1.0f0, Float32(GLOBAL_LINE_WOBBLE.randomness))
 
 function apply_global_line_wobble_uniforms!(data::Dict{Symbol, Any})
     data[:line_wobble] = global_line_wobble_strength()
     data[:line_wobble_amplitude_px] = global_line_wobble_amplitude_px()
     data[:line_wobble_freq_1] = global_line_wobble_freq_1()
     data[:line_wobble_freq_2] = global_line_wobble_freq_2()
+    data[:line_wobble_length_px] = global_line_wobble_length_px()
+    data[:line_wobble_randomness] = global_line_wobble_randomness()
     return data
 end
 

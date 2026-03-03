@@ -491,7 +491,7 @@ void main(void)
     f_cumulative_length = g_lastlen[1];
     float wobble_seed = float(g_id[1].x);
     f_wobble_phase = TAU * hash11(0.00017 * wobble_seed + 0.37);
-    f_wobble_shift = 0.0;
+    f_wobble_shift = 200.0 * hash11(0.00029 * wobble_seed + 0.11);
 
     // 0 :butt/normal cap or joint | 1 :square cap | 2 rounded cap/joint
     f_capmode = ivec2(
